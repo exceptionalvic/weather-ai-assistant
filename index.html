@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Weather AI Assistant</title>
+    <script src="https://js.puter.com/v2/"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f7fa;
+            color: #333;
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        #chat-container {
+            height: 350px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            overflow-y: auto;
+            padding: 15px;
+            margin-bottom: 15px;
+            background-color: white;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        .message {
+            margin-bottom: 15px;
+            padding: 10px 15px;
+            border-radius: 18px;
+            line-height: 1.4;
+            max-width: 80%;
+        }
+        .user-message {
+            background-color: #e3f2fd;
+            margin-left: auto;
+            border-bottom-right-radius: 5px;
+        }
+        .assistant-message {
+            background-color: #f1f1f1;
+            margin-right: auto;
+            border-bottom-left-radius: 5px;
+        }
+        .weather-data {
+            background-color: #e8f5e9;
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 5px;
+            font-size: 0.9em;
+        }
+        #input-container {
+            display: flex;
+            gap: 10px;
+        }
+        #user-input {
+            flex-grow: 1;
+            padding: 12px 15px;
+            border: 1px solid #ddd;
+            border-radius: 25px;
+            font-size: 16px;
+            outline: none;
+            transition: border 0.3s;
+        }
+        #user-input:focus {
+            border-color: #64b5f6;
+        }
+        #send-button {
+            padding: 0 25px;
+            background-color: #42a5f5;
+            color: white;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        #send-button:hover {
+            background-color: #1e88e5;
+        }
+        .typing-indicator {
+            display: inline-block;
+            padding: 10px 15px;
+            background-color: #f1f1f1;
+            border-radius: 18px;
+            color: #666;
+            font-style: italic;
+        }
+        .timestamp {
+            font-size: 0.7em;
+            color: #999;
+            margin-top: 3px;
+            text-align: right;
+        }
+    </style>
+</head>
+<body>
+    <h1>🌦️ Weather AI Assistant</h1>
+    <div id="chat-container"></div>
+    <div id="input-container">
+        <input type="text" id="user-input" placeholder="Ask about weather or anything else..." autocomplete="off">
+        <button id="send-button">Send</button>
+    </div>
+
+    <script>
+        // Initialize Puter.js early to minimize popups
+        document.addEventListener('DOMContentLoaded', () => {
+            puter.init().catch(err => console.log("Puter initialization:", err));
+        });
+
+        // DOM elements
+        const chatContainer = document.getElementById('chat-container');
+        const userInput = document.getElementById('user-input');
+        const sendButton = document.getElementById('send-button');
+
+        // Add message to chat
+        function addMessage(role, content, weatherData = null) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${role}-message`;
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.textContent = content;
+            messageDiv.appendChild(contentDiv);
+            
+            if (weatherData) {
+                const weatherDiv = document.createElement('div');
+                weatherDiv.className = 'weather-data';
+                weatherDiv.innerHTML = `
+                    <strong>🌡️ Temperature:</strong> ${weatherData.temp}°C<br>
+                    <strong>☁️ Conditions:</strong> ${weatherData.description}<br>
+                    <strong>💧 Humidity:</strong> ${weatherData.humidity}%<br>
+                    <strong>🌬️ Wind:</strong> ${weatherData.wind} m/s
+                `;
+                messageDiv.appendChild(weatherDiv);
+            }
+            
+            const timestampDiv = document.createElement('div');
+            timestampDiv.className = 'timestamp';
+            timestampDiv.textContent = new Date().toLocaleTimeString();
+            messageDiv.appendChild(timestampDiv);
+            
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        // Show typing indicator
+        function showTypingIndicator() {
+            const typingDiv = document.createElement('div');
+            typingDiv.id = 'typing-indicator';
+            typingDiv.className = 'typing-indicator message assistant-message';
+            typingDiv.textContent = 'Thinking...';
+            chatContainer.appendChild(typingDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+            return typingDiv;
+        }
+
+        // Hide typing indicator
+        function hideTypingIndicator(typingDiv) {
+            if (typingDiv && typingDiv.parentNode) {
+                typingDiv.parentNode.removeChild(typingDiv);
+            }
+        }
+
+        // Smart city extraction from prompt
+        function extractCityFromPrompt(prompt) {
+            // Remove question marks and other punctuation
+            const cleanPrompt = prompt.replace(/[?.,!]/g, '');
+            
+            // Common patterns for weather questions
+            const patterns = [
+                /(?:weather|temperature|forecast).*?(?:in|at|for|of)\s([a-zA-Z\s]+)/i,
+                /([a-zA-Z\s]+)\s(?:weather|temperature|forecast)/i,
+                /(?:what's|what is|how is).*?(?:weather|temperature).*?(?:in|at|for|of)\s([a-zA-Z\s]+)/i,
+                /(?:in|at)\s([a-zA-Z\s]+)$/i
+            ];
+            
+            for (const pattern of patterns) {
+                const match = cleanPrompt.match(pattern);
+                if (match && match[1]) {
+                    return match[1].trim();
+                }
+            }
+            
+            return null;
+        }
+
+        // Get weather data from FastAPI backend
+        async function getWeatherData(city) {
+            try {
+                // Clean city name (remove special chars, extra spaces)
+                const cleanCity = city.replace(/[^a-zA-Z\s]/g, '').replace(/\s+/g, ' ').trim();
+                if (!cleanCity) return null;
+                
+                const response = await fetch(`http://localhost:3001/api/weather?city=${encodeURIComponent(cleanCity)}`);
+                
+                if (!response.ok) {
+                    const error = await response.json().catch(() => ({}));
+                    throw new Error(error.detail || 'Weather service unavailable');
+                }
+                
+                return await response.json();
+            } catch (error) {
+                console.error('Weather API error:', error);
+                return null;
+            }
+        }
+
+        // Process user input
+        async function processInput() {
+            const prompt = userInput.value.trim();
+            if (!prompt) return;
+            
+            // Add user message to chat
+            addMessage('user', prompt);
+            userInput.value = '';
+            
+            // Show typing indicator
+            const typingIndicator = showTypingIndicator();
+            
+            try {
+                // Check if this is a weather-related query
+                const weatherKeywords = ['weather', 'temperature', 'forecast', 'humid', 'wind', 'rain', 'snow', 'sunny'];
+                const isWeatherQuery = weatherKeywords.some(keyword => 
+                    prompt.toLowerCase().includes(keyword)
+                );
+                
+                if (isWeatherQuery) {
+                    // Extract city name (with improved NLP)
+                    let city = extractCityFromPrompt(prompt) || 'New York';
+                    
+                    // Get weather data
+                    const weatherData = await getWeatherData(city);
+                    
+                    if (weatherData) {
+                        // Generate AI response incorporating weather data
+                        const aiPrompt = `The user asked: "${prompt}". Here's the current weather data for ${city}:
+- Temperature: ${weatherData.temp}°C
+- Conditions: ${weatherData.description}
+- Humidity: ${weatherData.humidity}%
+- Wind: ${weatherData.wind} m/s
+
+Provide a friendly, conversational response to the user's question incorporating this weather information.`;
+                        
+                        const aiResponse = await puter.ai.chat(aiPrompt);
+                        addMessage('assistant', aiResponse, weatherData);
+                    } else {
+                        addMessage('assistant', `Sorry, I couldn't retrieve weather data for ${city}. Please try another city.`);
+                    }
+                } else {
+                    // Handle general non-weather questions
+                    const response = await puter.ai.chat(prompt);
+                    addMessage('assistant', response);
+                }
+            } catch (error) {
+                console.error('Error processing request:', error);
+                addMessage('assistant', "I'm sorry, I encountered an error processing your request. Please try again.");
+            } finally {
+                hideTypingIndicator(typingIndicator);
+            }
+        }
+
+        // Event listeners
+        sendButton.addEventListener('click', processInput);
+        userInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') processInput();
+        });
+
+        // Initial greeting
+        addMessage('assistant', "Hello! I'm your AI assistant. You can ask me about:"
+            + "\n• Current weather in any city (e.g. 'What's the weather in Tokyo?')"
+            + "\n• General knowledge questions"
+            + "\n• Or just chat with me!");
+    </script>
+</body>
+</html>
