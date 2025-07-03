@@ -5,4 +5,4 @@
 - Puter.js
 - Vanilla JS
 - HTML
-- OpenAI (GPT 4)
+- LLM Model (OpenAI's GPT 4)
